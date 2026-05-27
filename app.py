@@ -226,12 +226,36 @@ def upload():
 
 if __name__ == '__main__':
     import socket
+    import threading
+    import webbrowser
+    import time
+
     port = 5099
+    started = False
+
     for _ in range(10):
         try:
+            # 检查端口是否可用
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(('127.0.0.1', port))
+            s.close()
+
+            url = f'http://127.0.0.1:{port}'
+
+            # 在后台线程打开浏览器
+            def open_browser():
+                time.sleep(1.5)
+                webbrowser.open(url)
+
+            threading.Thread(target=open_browser, daemon=True).start()
+
+            print(f'服务已启动，浏览器将自动打开 → {url}')
+            print('按 Ctrl+C 或关闭此窗口退出')
             app.run(host='127.0.0.1', port=port, debug=False)
+            started = True
             break
         except OSError:
             port += 1
-    else:
-        input(f'无法启动：所有端口均被占用。按回车退出...')
+
+    if not started:
+        input('无法启动：所有端口均被占用。按回车退出...')
