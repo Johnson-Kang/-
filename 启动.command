@@ -7,7 +7,7 @@ echo "========================================"
 echo ""
 
 # 停掉旧进程
-lsof -ti:5001 | xargs kill -9 2>/dev/null
+lsof -ti:5099 | xargs kill -9 2>/dev/null
 sleep 0.5
 
 # 检查并安装依赖
@@ -19,7 +19,7 @@ echo ""
 
 # 打开浏览器
 sleep 1
-open "http://127.0.0.1:5001" 2>/dev/null &
+open "http://127.0.0.1:5099" 2>/dev/null &
 
 # 启动 Flask
 python3 app.py

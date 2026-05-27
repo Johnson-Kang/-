@@ -225,4 +225,13 @@ def upload():
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5001, debug=False)
+    import socket
+    port = 5099
+    for _ in range(10):
+        try:
+            app.run(host='127.0.0.1', port=port, debug=False)
+            break
+        except OSError:
+            port += 1
+    else:
+        input(f'无法启动：所有端口均被占用。按回车退出...')
