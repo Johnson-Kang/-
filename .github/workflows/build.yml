@@ -1,0 +1,35 @@
+name: 构建 Mac / Windows 可执行文件
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install flask openpyxl pyinstaller
+      - run: pyinstaller --onefile --name "通途订单整理工具-Mac" --hidden-import=openpyxl app.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 通途订单整理工具-Mac
+          path: dist/通途订单整理工具-Mac
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install flask openpyxl pyinstaller
+      - run: pyinstaller --onefile --name "通途订单整理工具-Windows" --hidden-import=openpyxl app.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 通途订单整理工具-Windows
+          path: dist/通途订单整理工具-Windows.exe
