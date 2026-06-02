@@ -155,7 +155,12 @@ processBtn.addEventListener('click', async () => {
     let name = selectedFile.name.replace(/[(（]?未整理[)）]?/g, '').replace('.xlsx', '（已整理）.xlsx');
     downloadBtn.download = name;
     downloadBtn.style.display = 'inline-block';
-    showStatus('整理完成！共处理 ' + resp.headers.get('X-Row-Count') + ' 行数据', 'success');
+    let msg = '整理完成！共处理 ' + resp.headers.get('X-Row-Count') + ' 行数据';
+    let failed = parseInt(resp.headers.get('X-Failed-Count') || '0');
+    if (failed > 0) {
+      msg += '，' + failed + ' 行未能识别工厂（已在表格末尾红字列出）';
+    }
+    showStatus(msg, 'success');
     processBtn.disabled = false;
   } catch (e) {
     showStatus('网络错误：' + e.message, 'error');
@@ -191,7 +196,7 @@ def upload():
     tmp_in.close()
 
     try:
-        rows, headers, errors, merge_ranges = processor.process(tmp_in.name)
+        rows, headers, errors, merge_ranges, failed_orders = processor.process(tmp_in.name)
     except Exception as e:
         os.unlink(tmp_in.name)
         return {'error': f'处理异常：{str(e)}'}, 500
@@ -201,7 +206,7 @@ def upload():
     # 写入输出到临时文件
     tmp_out = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
     tmp_out.close()
-    processor.write_output(rows, headers, tmp_out.name, merge_ranges)
+    processor.write_output(rows, headers, tmp_out.name, merge_ranges, failed_orders)
 
     out_name = re.sub(r'[（(]?未整理[）)]?', '', f.filename).replace('.xlsx', '（已整理）.xlsx')
 
@@ -212,6 +217,7 @@ def upload():
         download_name=out_name,
     )
     resp.headers['X-Row-Count'] = str(len(rows))
+    resp.headers['X-Failed-Count'] = str(len(failed_orders))
 
     # 清理（延迟删除，等响应发送后）
     @resp.call_on_close

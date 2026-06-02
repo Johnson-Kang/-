@@ -27,6 +27,8 @@ def identify_factory(am_value):
         return '杭州创明'
     if last.upper().startswith('SY-'):
         return '上海顺裕'
+    if last.upper().startswith('YS-'):
+        return '杭州创明'
     # 日期格式 XX.XX 且首 token 非数字 → 宁波利洋
     if re.match(r'^\d{1,2}\.\d{2}$', last) and not re.match(r'^[\d.]+$', tokens[0]):
         return '宁波利洋'
@@ -138,6 +140,7 @@ def process(input_path):
     # ── 逐行读取为原始记录 ──
     raw_rows = []
     errors = []
+    failed_orders = []  # 无法识别的订单号列表
 
     for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=False), 2):
         order_no = get_val(row, '订单号')
@@ -149,6 +152,7 @@ def process(input_path):
         factory = identify_factory(am_raw)
         if factory is None:
             errors.append(f'第 {row_num} 行：无法识别工厂，AM列内容 = "{am_raw}"')
+            failed_orders.append({'order_no': order_no, 'row': row_num, 'am': am_raw})
             continue
 
         pc, pn, w, h, fc = parse_am(am_raw, factory)
@@ -305,14 +309,14 @@ def process(input_path):
         '通途sku货品备注', '平台sku', '平台sku数量', '订单备注', '买家留言',
     ]
 
-    return output_rows, out_headers, errors, merge_ranges
+    return output_rows, out_headers, errors, merge_ranges, failed_orders
 
 
 # 需要以文本格式存储的列（防止 Excel 自动转数字丢失尾零）
 TEXT_FORMAT_COLS = {10, 12, 13, 14}  # 产品编码、宽度、高度、厂家编码
 
 
-def write_output(output_rows, headers, output_path, merge_ranges=None):
+def write_output(output_rows, headers, output_path, merge_ranges=None, failed_orders=None):
     """将处理结果写入 xlsx 文件，可合并单元格"""
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -343,9 +347,19 @@ def write_output(output_rows, headers, output_path, merge_ranges=None):
                 start_row=start_row, start_column=start_col,
                 end_row=end_row, end_column=end_col,
             )
-            # 对合并区域内的所有单元格设置垂直居中
             for r in range(start_row, end_row + 1):
                 for c in range(start_col, end_col + 1):
                     ws.cell(row=r, column=c).alignment = Alignment(vertical='center')
+
+    # 追加未能处理的订单号（红字）
+    if failed_orders:
+        last_row = len(output_rows) + 2  # 数据末尾下一行
+        ws.cell(row=last_row, column=1, value='以下订单未能识别工厂，请检查：').font = Font(color='FF0000')
+        red_font = Font(color='FF0000')
+        for i, fo in enumerate(failed_orders):
+            r = last_row + 1 + i
+            cell = ws.cell(row=r, column=3, value=fo['order_no'])
+            cell.font = red_font
+            ws.cell(row=r, column=10, value=fo['am']).font = red_font
 
     wb.save(output_path)
