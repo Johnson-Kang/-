@@ -255,6 +255,10 @@ def process(input_path):
         start_row = len(output_rows) + 2  # +2 因为 row 1 是表头
 
         for idx, r in enumerate(group):
+            # 浙江曼联：J列(产品编码)与K列(产品名称)互换
+            pc_val = r['产品名称'] if '浙江曼联' in r['物流商与厂家'] else r['产品编码']
+            pn_val = r['产品编码'] if '浙江曼联' in r['物流商与厂家'] else r['产品名称']
+
             if idx == 0:
                 output_rows.append([
                     r['物流商与厂家'],
@@ -266,8 +270,8 @@ def process(input_path):
                     r['城市'],
                     str(total_qty),
                     r['通途sku'],
-                    r['产品编码'],
-                    r['产品名称'],
+                    pc_val,
+                    pn_val,
                     r['宽度'],
                     r['高度'],
                     r['厂家编码'],
@@ -282,8 +286,8 @@ def process(input_path):
                 output_rows.append([
                     '', '', '', '', '', '', '', '',
                     r['通途sku'],
-                    r['产品编码'],
-                    r['产品名称'],
+                    pc_val,
+                    pn_val,
                     r['宽度'],
                     r['高度'],
                     r['厂家编码'],
