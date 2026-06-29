@@ -119,6 +119,81 @@ def parse_am(am_value, factory):
     return [pc, pn, w, h, fc]
 
 
+# ── 分包 ──────────────────────────────────────────────────────
+
+def _split_into_packages(group):
+    """将一个订单的 SKU 列表按宽度规则拆分为多个包裹"""
+    # 复制并展开为独立产品单元
+    units = []
+    for r in group:
+        qty = int(float(r['sku数量'])) if r['sku数量'] else 0
+        w = r['width_cm']
+        for _ in range(qty):
+            units.append({'row': r, 'width': w, 'is_wide': w > 165})
+
+    if not units:
+        return [group]  # 无产品，保持原样
+
+    has_wide = any(u['is_wide'] for u in units)
+    has_narrow = any(not u['is_wide'] for u in units)
+
+    if has_wide and not has_narrow:
+        max_per_pkg = 2
+        wide_per_pkg = 2
+    elif has_narrow and not has_wide:
+        max_per_pkg = 4
+        wide_per_pkg = 4
+    else:
+        max_per_pkg = 4
+        wide_per_pkg = 1
+
+    # 排序：宽的在前
+    units.sort(key=lambda u: (0 if u['is_wide'] else 1, -u['width']))
+
+    # 贪心装箱
+    packages = []
+    used = [False] * len(units)
+
+    while not all(used):
+        pkg_units = []
+        pkg_wide = 0
+        for i, u in enumerate(units):
+            if used[i]:
+                continue
+            if len(pkg_units) >= max_per_pkg:
+                break
+            if u['is_wide'] and pkg_wide >= wide_per_pkg:
+                continue
+
+            pkg_units.append(i)
+            used[i] = True
+            if u['is_wide']:
+                pkg_wide += 1
+
+        packages.append(pkg_units)
+
+    # 将包裹转回行格式：按原始 SKU 聚合数量
+    result = []
+    for pkg in packages:
+        # 统计此包裹中每个原始行的产品数
+        counts = {}
+        for idx in pkg:
+            row_id = id(units[idx]['row'])
+            counts[row_id] = counts.get(row_id, 0) + 1
+
+        pkg_rows = []
+        for row_id, qty in counts.items():
+            # 找到原始行
+            orig = next(r for r in group if id(r) == row_id)
+            new_row = dict(orig)
+            new_row['sku数量'] = str(qty)
+            pkg_rows.append(new_row)
+
+        result.append(pkg_rows)
+
+    return result
+
+
 # ── 主处理函数 ─────────────────────────────────────────────────
 
 def process(input_path):
@@ -226,6 +301,21 @@ def process(input_path):
         groups.append((current_order, group))
         i = j
 
+    # ── 分包：按宽度规则将订单拆分为包裹 ──
+    pkg_groups = []  # (order_no, [rows_for_this_package])
+    for order_no, group in groups:
+        packages = _split_into_packages(group)
+        base_order = order_no
+        for pkg_idx, pkg_rows in enumerate(packages):
+            if pkg_idx == 0:
+                pkg_order = base_order
+            else:
+                pkg_order = f'{base_order}-{pkg_idx}'
+            # 更新每行的订单号
+            for r in pkg_rows:
+                r['order_no'] = pkg_order
+            pkg_groups.append((pkg_order, pkg_rows))
+
     # ── 按厂家排序，同厂家保持原始顺序 ──
     FACTORY_ORDER = {
         '广州创明-东莞YDH': 0,
@@ -237,13 +327,13 @@ def process(input_path):
         '浙江曼联-上海YDH': 6,
         '浙江曼联-OCS': 7,
     }
-    groups.sort(key=lambda g: FACTORY_ORDER.get(g[1][0]['物流商与厂家'], 99))
+    pkg_groups.sort(key=lambda g: FACTORY_ORDER.get(g[1][0]['物流商与厂家'], 99))
 
     # ── 按组生成输出行，同时记录需要合并的单元格范围 ──
     output_rows = []
     merge_ranges = []  # (start_row, end_row, start_col, end_col) 1-indexed
 
-    for order_no, group in groups:
+    for order_no, group in pkg_groups:
         # 计算订单总 SKU 数量（已在上面的循环中计算，此处重算保证一致性）
         total_qty = 0
         for r in group:
@@ -308,7 +398,7 @@ def process(input_path):
     # ── 输出表头 ──
     out_headers = [
         '物流商与厂家', '生成日期', '订单号', '买家姓名', '联系电话',
-        '邮编', '城市', '通途sku数量', '通途sku', '通途sku配货名称',
+        '邮编', '城市', '包裹内产品数', '通途sku', '通途sku配货名称',
         '产品名称', '宽度', '高度', '厂家编码', '通途sku数量',
         '通途sku货品备注', '平台sku', '平台sku数量', '订单备注', '买家留言',
     ]
